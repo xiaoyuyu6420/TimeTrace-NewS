@@ -335,9 +335,10 @@ class PeopleCnCrawler:
             return False
         
         patterns = [
-            r'/n1/\d{4}/\d{4}-\d{2}/\w+\.html',
+            r'/n1/\d{4}/\d{2}-\d{2}/[a-zA-Z0-9-]+\.html',
+            r'/n1/\d{4}/\d{4}/[a-zA-Z0-9-]+\.html',
             r'/GB/\d+/\d+-\d+/\d+\.html',
-            r'/\d{4}/\d{4}/\w+\.html',
+            r'/\d{4}/\d{4}/[a-zA-Z0-9-]+\.html',
         ]
         
         for pattern in patterns:
