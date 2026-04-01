@@ -74,28 +74,6 @@ class CredibilityStatsResponse(BaseModel):
     tier_distribution: dict[str, int]
 
 
-class HistoricalFetchRequest(BaseModel):
-    """Request for historical news fetch from multiple sources."""
-    sources: Optional[list[str]] = Field(None, description="Sources to fetch from, None for all")
-    days_back: int = Field(30, ge=1, le=365, description="Days to look back")
-    keywords: Optional[list[str]] = Field(None, description="Keywords to search")
-    max_articles: int = Field(100, ge=1, le=1000, description="Max articles per source")
-
-
-class HistoricalFetchResponse(BaseModel):
-    """Response for historical news fetch."""
-    success: bool
-    total_articles: int
-    sources_fetched: list[str]
-    errors: list[str] = []
-
-
-class AvailableSourcesResponse(BaseModel):
-    """Response for available sources list."""
-    web_crawlers: dict[str, str]
-    news_apis: dict[str, str]
-
-
 @router.get("/stats", response_model=AdminStats)
 def get_stats(_admin=Depends(require_admin), db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
@@ -435,75 +413,84 @@ def get_credibility_stats(
     )
 
 
-# ─── Historical News Fetch ─────────────────────────────────
+# ─── Historical News Fetch (People's Daily) ─────────────────────────
 
-@router.get("/historical/sources", response_model=AvailableSourcesResponse)
-def list_historical_sources(_admin=Depends(require_admin)):
-    """List available sources for historical news fetching."""
-    from ..services.historical_fetcher import get_available_sources
-    sources = get_available_sources()
-    return AvailableSourcesResponse(
-        web_crawlers=sources.get("web_crawlers", {}),
-        news_apis=sources.get("news_apis", {}),
-    )
+class PeopleCrawlRequest(BaseModel):
+    """Request for People's Daily historical crawl."""
+    years: int = Field(2, ge=1, le=5, description="Years of historical data to fetch")
+    max_articles: int = Field(10000, ge=100, le=50000, description="Maximum articles to fetch")
+    channels: Optional[list[str]] = Field(None, description="Channels to crawl: news, politics, society, tech, finance, world")
 
 
-@router.post("/historical/fetch", response_model=HistoricalFetchResponse)
-def trigger_historical_fetch(
-    body: HistoricalFetchRequest,
+class PeopleCrawlResponse(BaseModel):
+    """Response for People's Daily historical crawl."""
+    success: bool
+    message: str
+    articles_fetched: int = 0
+    articles_saved: int = 0
+
+
+@router.post("/people/fetch", response_model=PeopleCrawlResponse)
+def trigger_people_crawl(
+    body: PeopleCrawlRequest,
     _admin=Depends(require_admin),
 ):
-    """Fetch historical news from multiple sources (web crawlers, APIs)."""
-    from ..services.historical_fetcher import MultiSourceFetcher
+    """Fetch historical news from People's Daily (人民网).
+    
+    This is the primary source for historical news data.
+    Supports fetching up to 2 years of historical news.
+    """
+    from ..services.people_crawler import PeopleCnCrawler
     from ..database import SessionLocal
     
-    results = {"articles": [], "errors": [], "sources": []}
+    results = {"articles": [], "saved": 0, "error": None}
     
     def _run():
         db = SessionLocal()
         try:
-            from datetime import datetime, timedelta, timezone
-            
-            end_date = datetime.now(timezone.utc)
-            start_date = end_date - timedelta(days=body.days_back)
-            
-            fetcher = MultiSourceFetcher(
-                max_articles_per_source=body.max_articles,
+            crawler = PeopleCnCrawler(
+                max_articles=body.max_articles,
+                request_delay=1.0,
             )
             
-            if body.sources:
-                fetch_results = fetcher.fetch_from_multiple(
-                    sources=body.sources,
-                    start_date=start_date,
-                    end_date=end_date,
-                    keywords=body.keywords,
-                )
-                for source, result in fetch_results.items():
-                    results["sources"].append(source)
-                    if result.success:
-                        results["articles"].extend(result.articles)
-                    else:
-                        results["errors"].extend(result.errors)
-            else:
-                articles = fetcher.fetch_all(
-                    start_date=start_date,
-                    end_date=end_date,
-                    keywords=body.keywords,
-                )
-                results["articles"] = articles
+            articles = crawler.fetch_years(
+                years=body.years,
+                channels=body.channels,
+            )
             
-            saved = fetcher.save_to_database(results["articles"], db)
+            results["articles"] = articles
+            
+            saved = crawler.save_to_database(articles, db)
+            results["saved"] = saved
+            
+            logger.info(f"People's Daily crawl completed: {len(articles)} fetched, {saved} saved")
             
         except Exception as e:
-            results["errors"].append(str(e))
+            results["error"] = str(e)
+            logger.error(f"People's Daily crawl failed: {e}")
         finally:
             db.close()
     
     threading.Thread(target=_run, daemon=True).start()
     
-    return HistoricalFetchResponse(
+    return PeopleCrawlResponse(
         success=True,
-        total_articles=0,
-        sources_fetched=body.sources or [],
-        errors=[],
+        message=f"Started fetching {body.years} years of news from People's Daily",
+        articles_fetched=0,
+        articles_saved=0,
     )
+
+
+@router.get("/people/channels")
+def list_people_channels(_admin=Depends(require_admin)):
+    """List available channels for People's Daily crawler."""
+    return {
+        "channels": {
+            "news": "新闻",
+            "politics": "时政",
+            "society": "社会",
+            "tech": "科技",
+            "finance": "财经",
+            "world": "国际",
+        }
+    }

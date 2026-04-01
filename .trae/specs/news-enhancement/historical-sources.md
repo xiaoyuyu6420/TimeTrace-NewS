@@ -1,68 +1,92 @@
 # 历史新闻获取方案
 
-## 问题分析
+## 设计决策
 
-RSS 的局限性：
-- RSS feed 通常只保留最近 20-100 条条目
-- 无法获取更早期的历史新闻
-- 不同 RSS 源保留策略不同
+**专注单一数据源：人民网**
 
-## 解决方案：多源历史新闻获取
+理由：
+1. 数据质量可控 - 官方权威媒体，内容规范
+2. 维护成本低 - 无需适配多个网站
+3. 数据干净 - 结构化好，易于清洗
+4. 覆盖面广 - 多频道（新闻、时政、社会、科技、财经、国际）
 
-### 方案一：新闻网站归档爬虫
+## 人民网爬虫实现
 
-**优点**：数据完整、免费
-**缺点**：需要针对不同网站编写规则、可能被封禁
+### 文件位置
+`backend/app/services/people_crawler.py`
 
-**支持的网站**：
-- 人民网、新华网等官方媒体
-- 新浪、网易、腾讯等门户网站
-- 36氪、虎嗅等科技媒体
+### 支持的频道
+| 频道代码 | 名称 | 说明 |
+|----------|------|------|
+| news | 新闻 | 综合新闻 |
+| politics | 时政 | 政治新闻 |
+| society | 社会 | 社会新闻 |
+| tech | 科技 | 科技新闻 |
+| finance | 财经 | 财经新闻 |
+| world | 国际 | 国际新闻 |
 
-### 方案二：新闻 API 服务
+### 数据清洗
+- 标题：去除网站后缀（人民网、人民网点等）
+- 内容：去除多余空白、HTML标签、脚本
+- 日期：多格式解析，支持URL提取日期
+- 作者：提取编辑/记者信息
 
-**优点**：稳定可靠、数据规范
-**缺点**：通常需要付费、有调用限制
+### API 接口
 
-**可选 API**：
-- NewsAPI (newsapi.org) - 国际新闻
-- GNews API - 全球新闻
-- 百度新闻 API - 国内新闻
-- 智谱 BigModel 新闻搜索
-
-### 方案三：搜索引擎新闻搜索
-
-**优点**：覆盖面广、支持时间范围
-**缺点**：需要 API key、结果可能不完整
-
-**可选引擎**：
-- Google News Search
-- Bing News Search API
-
-### 方案四：开放新闻数据库
-
-**优点**：数据量大、免费
-**缺点**：数据可能滞后、格式不统一
-
-**可选数据库**：
-- GDELT 项目 - 全球事件数据库
-- Common Crawl - 网页快照
-
-## 推荐架构
-
+**获取历史新闻**
 ```
-historical_fetcher/
-├── base.py              # 基类和接口定义
-├── rss_adapter.py       # RSS 扩展适配器
-├── web_crawler.py       # 网站爬虫适配器
-├── news_api.py          # 新闻 API 适配器
-├── search_engine.py     # 搜索引擎适配器
-└── factory.py           # 统一获取工厂
+POST /api/admin/people/fetch
+{
+    "years": 2,           // 获取最近2年
+    "max_articles": 10000, // 最大文章数
+    "channels": ["news", "tech"]  // 可选，不填则全部
+}
 ```
 
-## 实现优先级
+**查看可用频道**
+```
+GET /api/admin/people/channels
+```
 
-1. **P0** - 新闻网站爬虫（人民网、新浪等主流媒体）
-2. **P1** - 智谱 BigModel 新闻搜索（已有 API key）
-3. **P2** - NewsAPI 集成
-4. **P3** - 搜索引擎 API
+## 使用示例
+
+```python
+from app.services.people_crawler import PeopleCnCrawler
+
+# 创建爬虫
+crawler = PeopleCnCrawler(
+    max_articles=10000,
+    request_delay=1.0,
+)
+
+# 获取最近2年的新闻
+articles = crawler.fetch_years(years=2)
+
+# 获取指定频道
+articles = crawler.fetch_years(
+    years=2,
+    channels=["news", "tech"]
+)
+
+# 保存到数据库
+from app.database import SessionLocal
+db = SessionLocal()
+saved = crawler.save_to_database(articles, db)
+```
+
+## 性能参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| max_articles | 10000 | 最大文章数 |
+| max_pages_per_channel | 100 | 每频道最大页数 |
+| request_delay | 1.0秒 | 请求间隔 |
+| timeout | 30秒 | 请求超时 |
+| max_retries | 3 | 最大重试次数 |
+
+## 注意事项
+
+1. **遵守 robots.txt**：人民网允许爬取
+2. **请求频率**：默认1秒间隔，避免被封
+3. **数据量**：2年约 10-20 万篇文章
+4. **编码**：人民网使用 GB2312 编码
