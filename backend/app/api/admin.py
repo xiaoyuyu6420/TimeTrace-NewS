@@ -74,6 +74,28 @@ class CredibilityStatsResponse(BaseModel):
     tier_distribution: dict[str, int]
 
 
+class HistoricalFetchRequest(BaseModel):
+    """Request for historical news fetch from multiple sources."""
+    sources: Optional[list[str]] = Field(None, description="Sources to fetch from, None for all")
+    days_back: int = Field(30, ge=1, le=365, description="Days to look back")
+    keywords: Optional[list[str]] = Field(None, description="Keywords to search")
+    max_articles: int = Field(100, ge=1, le=1000, description="Max articles per source")
+
+
+class HistoricalFetchResponse(BaseModel):
+    """Response for historical news fetch."""
+    success: bool
+    total_articles: int
+    sources_fetched: list[str]
+    errors: list[str] = []
+
+
+class AvailableSourcesResponse(BaseModel):
+    """Response for available sources list."""
+    web_crawlers: dict[str, str]
+    news_apis: dict[str, str]
+
+
 @router.get("/stats", response_model=AdminStats)
 def get_stats(_admin=Depends(require_admin), db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
@@ -410,4 +432,78 @@ def get_credibility_stats(
         scored_articles=stats.get("scored_articles", 0),
         average_score=stats.get("average_score", 0.0),
         tier_distribution=stats.get("tier_distribution", {"A": 0, "B": 0, "C": 0, "D": 0}),
+    )
+
+
+# ─── Historical News Fetch ─────────────────────────────────
+
+@router.get("/historical/sources", response_model=AvailableSourcesResponse)
+def list_historical_sources(_admin=Depends(require_admin)):
+    """List available sources for historical news fetching."""
+    from ..services.historical_fetcher import get_available_sources
+    sources = get_available_sources()
+    return AvailableSourcesResponse(
+        web_crawlers=sources.get("web_crawlers", {}),
+        news_apis=sources.get("news_apis", {}),
+    )
+
+
+@router.post("/historical/fetch", response_model=HistoricalFetchResponse)
+def trigger_historical_fetch(
+    body: HistoricalFetchRequest,
+    _admin=Depends(require_admin),
+):
+    """Fetch historical news from multiple sources (web crawlers, APIs)."""
+    from ..services.historical_fetcher import MultiSourceFetcher
+    from ..database import SessionLocal
+    
+    results = {"articles": [], "errors": [], "sources": []}
+    
+    def _run():
+        db = SessionLocal()
+        try:
+            from datetime import datetime, timedelta, timezone
+            
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=body.days_back)
+            
+            fetcher = MultiSourceFetcher(
+                max_articles_per_source=body.max_articles,
+            )
+            
+            if body.sources:
+                fetch_results = fetcher.fetch_from_multiple(
+                    sources=body.sources,
+                    start_date=start_date,
+                    end_date=end_date,
+                    keywords=body.keywords,
+                )
+                for source, result in fetch_results.items():
+                    results["sources"].append(source)
+                    if result.success:
+                        results["articles"].extend(result.articles)
+                    else:
+                        results["errors"].extend(result.errors)
+            else:
+                articles = fetcher.fetch_all(
+                    start_date=start_date,
+                    end_date=end_date,
+                    keywords=body.keywords,
+                )
+                results["articles"] = articles
+            
+            saved = fetcher.save_to_database(results["articles"], db)
+            
+        except Exception as e:
+            results["errors"].append(str(e))
+        finally:
+            db.close()
+    
+    threading.Thread(target=_run, daemon=True).start()
+    
+    return HistoricalFetchResponse(
+        success=True,
+        total_articles=0,
+        sources_fetched=body.sources or [],
+        errors=[],
     )
