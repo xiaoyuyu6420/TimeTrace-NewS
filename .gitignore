@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Build output
+web/dist/
+
+# Database
+*.db
+
+# Environment
+.env
+.secret
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
