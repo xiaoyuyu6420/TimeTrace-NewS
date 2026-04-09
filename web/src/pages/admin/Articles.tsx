@@ -1,40 +1,29 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import { Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-
-interface Article {
-  id: number;
-  title: string;
-  source_url: string;
-  summary: string;
-  keywords: string[];
-  published_at: string | null;
-}
-
-interface PageData {
-  items: Article[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
+import type { Article, PageResponse } from '../../types';
 
 export function AdminArticles() {
-  const [data, setData] = useState<PageData>({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0 });
+  const [data, setData] = useState<PageResponse<Article>>({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0 });
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
 
   const fetch = () => {
     const params: Record<string, number | string> = { page, page_size: 20 };
     if (keyword) params.keyword = keyword;
-    api.get<PageData>('/articles', { params }).then((r) => setData(r.data)).catch(() => {});
+    api.get<PageResponse<Article>>('/articles', { params }).then((r) => setData(r.data)).catch((e) => console.error('Failed to load articles:', e));
   };
 
   useEffect(fetch, [page]);
 
   const deleteArticle = async (id: number) => {
-    await api.delete(`/articles/${id}`);
-    fetch();
+    if (!confirm('确定删除此文章？')) return;
+    try {
+      await api.delete(`/articles/${id}`);
+      fetch();
+    } catch (e) {
+      console.error('Failed to delete article:', e);
+    }
   };
 
   return (

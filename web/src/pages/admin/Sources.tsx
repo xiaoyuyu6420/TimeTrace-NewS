@@ -19,29 +19,42 @@ export function AdminSources() {
   const [newCat, setNewCat] = useState('科技');
   const [crawling, setCrawling] = useState(false);
 
-  const fetchSources = () => api.get<Source[]>('/rss').then((r) => setSources(r.data)).catch(() => {});
+  const fetchSources = () => api.get<Source[]>('/rss').then((r) => setSources(r.data)).catch((e) => console.error('Failed to load RSS sources:', e));
   useEffect(() => { fetchSources(); }, []);
 
   const addSource = async () => {
     if (!newName || !newUrl) return;
-    await api.post('/rss', { name: newName, url: newUrl, category: newCat });
-    setNewName(''); setNewUrl(''); setShowAdd(false);
-    fetchSources();
+    try {
+      await api.post('/rss', { name: newName, url: newUrl, category: newCat });
+      setNewName(''); setNewUrl(''); setShowAdd(false);
+      fetchSources();
+    } catch (e) {
+      console.error('Failed to add RSS source:', e);
+    }
   };
 
   const deleteSource = async (id: number) => {
-    await api.delete(`/rss/${id}`);
-    fetchSources();
+    if (!confirm('确定删除此 RSS 源？')) return;
+    try {
+      await api.delete(`/rss/${id}`);
+      fetchSources();
+    } catch (e) {
+      console.error('Failed to delete RSS source:', e);
+    }
   };
 
   const toggleActive = async (src: Source) => {
-    await api.put(`/rss/${src.id}`, { is_active: !src.is_active });
-    fetchSources();
+    try {
+      await api.put(`/rss/${src.id}`, { is_active: !src.is_active });
+      fetchSources();
+    } catch (e) {
+      console.error('Failed to toggle RSS source:', e);
+    }
   };
 
   const triggerCrawl = async () => {
     setCrawling(true);
-    try { await api.post('/rss/crawl'); } finally { setTimeout(() => setCrawling(false), 3000); }
+    try { await api.post('/rss/crawl'); } catch (e) { console.error('Failed to trigger crawl:', e); } finally { setTimeout(() => setCrawling(false), 3000); }
   };
 
   return (

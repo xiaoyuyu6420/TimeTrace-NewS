@@ -1,10 +1,10 @@
 """RSS source management routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ..auth import require_admin
-from ..database import get_db
+from ..deps import get_crawl_service, get_db, require_admin
+from ..database import SessionLocal
 from ..models import RssSource
 from ..schemas import MessageResponse, RssSourceCreate, RssSourceOut, RssSourceUpdate
 
@@ -29,7 +29,7 @@ def create_source(body: RssSourceCreate, _admin=Depends(require_admin), db: Sess
 def update_source(
     source_id: int, body: RssSourceUpdate, _admin=Depends(require_admin), db: Session = Depends(get_db)
 ):
-    src = db.query(RssSource).get(source_id)
+    src = db.get(RssSource, source_id)
     if not src:
         raise HTTPException(404, "Source not found")
     for k, v in body.model_dump(exclude_unset=True).items():
@@ -41,7 +41,7 @@ def update_source(
 
 @router.delete("/{source_id}", response_model=MessageResponse)
 def delete_source(source_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
-    src = db.query(RssSource).get(source_id)
+    src = db.get(RssSource, source_id)
     if not src:
         raise HTTPException(404, "Source not found")
     db.delete(src)
@@ -50,9 +50,23 @@ def delete_source(source_id: int, _admin=Depends(require_admin), db: Session = D
 
 
 @router.post("/crawl", response_model=MessageResponse)
-def trigger_crawl(_admin=Depends(require_admin)):
+def trigger_crawl(
+    _admin=Depends(require_admin),
+    background_tasks: BackgroundTasks = None,
+):
     """Manually trigger RSS crawl."""
-    from ..services.crawler import crawl_all
-    import threading
-    threading.Thread(target=crawl_all, daemon=True).start()
+    def _run():
+        db = SessionLocal()
+        try:
+            crawl_svc = get_crawl_service(db)
+            crawl_svc.crawl_all()
+        finally:
+            db.close()
+
+    if background_tasks:
+        background_tasks.add_task(_run)
+    else:
+        import threading
+        threading.Thread(target=_run, daemon=True).start()
+
     return MessageResponse(message="Crawl started")

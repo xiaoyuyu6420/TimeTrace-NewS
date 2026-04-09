@@ -8,6 +8,77 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# 强制使用测试数据库和密码（在导入 app 之前设置环境变量）
+os.environ["DATABASE_URL"] = "sqlite:///./test_timetrace.db"
+os.environ["ADMIN_PASSWORD"] = "test_admin_123"
+
+
+@pytest.fixture(scope="session")
+def app_client():
+    """创建测试用的 FastAPI TestClient，使用独立测试数据库。"""
+    from fastapi.testclient import TestClient
+
+    # 清理旧测试数据库，避免残留的 admin 用户导致密码不一致
+    _test_db_path = Path(__file__).parent.parent / "test_timetrace.db"
+    if _test_db_path.exists():
+        _test_db_path.unlink()
+
+    import app.config as config_module
+    import app.database as db_module
+
+    # 直接修改全局 settings 实例的属性（而非替换对象）
+    # 这样所有 from .config import settings 的引用都能生效
+    config_module.settings.ADMIN_PASSWORD = "test_admin_123"
+    test_db_url = "sqlite:///./test_timetrace.db"
+    config_module.settings.DATABASE_URL = test_db_url
+
+    # 重新创建 engine
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    test_engine = create_engine(
+        test_db_url,
+        connect_args={"check_same_thread": False},
+    )
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+    # 替换全局 engine 和 SessionLocal
+    db_module.engine = test_engine
+    db_module.SessionLocal = test_session_factory
+
+    # 创建所有表
+    from app.models import Base
+    Base.metadata.create_all(bind=test_engine)
+
+    # 运行种子数据
+    from app.main import seed_database
+    seed_database()
+
+    # 导入 app（此时会使用新的 engine）
+    from app.main import app
+    client = TestClient(app)
+
+    yield client
+
+    # 清理：删除测试数据库
+    import gc
+    gc.collect()
+    try:
+        _test_db_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="session")
+def admin_token(app_client):
+    """获取管理员 token。"""
+    resp = app_client.post("/api/users/login", json={
+        "username": "admin",
+        "password": "test_admin_123",
+    })
+    assert resp.status_code == 200, f"Login failed: {resp.text}"
+    return resp.json()["access_token"]
+
 
 @pytest.fixture
 def sample_article_html():

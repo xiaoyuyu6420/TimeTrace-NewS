@@ -1,11 +1,9 @@
 """Article CRUD routes."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..auth import require_admin
-from ..database import get_db
+from ..deps import get_db, require_admin
 from ..models import Article
 from ..schemas import ArticleOut, MessageResponse, PageResponse
 
@@ -44,7 +42,7 @@ def list_articles(
 
 @router.get("/{article_id}", response_model=ArticleOut)
 def get_article(article_id: int, db: Session = Depends(get_db)):
-    a = db.query(Article).get(article_id)
+    a = db.get(Article, article_id)
     if not a:
         raise HTTPException(404, "Article not found")
     return a
@@ -52,7 +50,7 @@ def get_article(article_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{article_id}", response_model=MessageResponse)
 def delete_article(article_id: int, _admin=Depends(require_admin), db: Session = Depends(get_db)):
-    a = db.query(Article).get(article_id)
+    a = db.get(Article, article_id)
     if not a:
         raise HTTPException(404, "Article not found")
     db.delete(a)

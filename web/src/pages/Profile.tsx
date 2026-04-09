@@ -28,16 +28,17 @@ export function Profile() {
         ]);
         setFollows(fRes.data);
         setRecs(rRes.data);
-      } catch { /* */ } finally { setLoading(false); }
+      } catch (e) { console.error('Failed to load profile data:', e); } finally { setLoading(false); }
     };
     fetch();
   }, []);
 
   const unfollow = async (eventId: number) => {
+    if (!confirm('确定取消关注此事件？')) return;
     try {
       await api.delete(`/users/follow/${eventId}`);
       setFollows((prev) => prev.filter((f) => f.event_id !== eventId));
-    } catch { /* */ }
+    } catch (e) { console.error('Failed to unfollow:', e); }
   };
 
   if (loading) {

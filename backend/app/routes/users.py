@@ -4,10 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..auth import (
-    create_access_token, get_current_user, hash_password, verify_password,
+from ..deps import (
+    create_access_token, get_current_user, get_db, hash_password, require_admin, verify_password,
 )
-from ..database import get_db
 from ..models import User, UserFollow, Event
 from ..schemas import (
     FollowOut, LoginRequest, MessageResponse, RegisterRequest,
@@ -49,7 +48,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 def get_me(user=Depends(get_current_user), db: Session = Depends(get_db)):
-    u = db.query(User).get(int(user["user_id"]))
+    u = db.get(User, int(user["user_id"]))
     if not u:
         raise HTTPException(404, "User not found")
     return u

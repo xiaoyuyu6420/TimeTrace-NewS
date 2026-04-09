@@ -1,28 +1,48 @@
-# Dependencies
+# ─── Dependencies ───
 node_modules/
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
 
-# Build output
-web/dist/
-
-# Database
+# ─── Database ───
 *.db
+*.sqlite3
 
-# Environment
+# ─── Environment & Secrets ───
 .env
+.env.local
+.env.*.local
 .secret
 
-# IDE
+# ─── Build output ───
+web/dist/
+
+# ─── IDE ───
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# OS
+# ─── OS ───
 Thumbs.db
 .DS_Store
+desktop.ini
 
-# Logs
+# ─── Logs ───
 *.log
 
-# Ignore vscode AI rules
+# ─── Python ───
+.venv/
+venv/
+*.egg
+
+# ─── AI / CodeBuddy ───
+.codebuddy/
+.workbuddy/
+.trae/
 .github/instructions/codacy.instructions.md

@@ -1,12 +1,15 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Rss, FileText, Zap, ArrowLeft, Clock, GitMerge } from 'lucide-react';
+import { LayoutDashboard, Rss, FileText, Zap, ArrowLeft, Clock, GitMerge, Settings, Activity, ScrollText } from 'lucide-react';
 
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: '概览' },
+  { to: '/admin/pipeline', icon: Activity, label: '管线可视化' },
+  { to: '/admin/logs', icon: ScrollText, label: '管线日志' },
   { to: '/admin/sources', icon: Rss, label: 'RSS源' },
   { to: '/admin/articles', icon: FileText, label: '文章' },
   { to: '/admin/events', icon: Zap, label: '事件' },
   { to: '/admin/manage', icon: GitMerge, label: '事件整理' },
+  { to: '/admin/settings', icon: Settings, label: '系统设置' },
 ];
 
 export function AdminLayout() {

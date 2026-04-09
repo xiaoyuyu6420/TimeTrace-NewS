@@ -2,45 +2,36 @@ import { useEffect, useState } from 'react';
 import api from '../../api/client';
 import { Trash2, ExternalLink, CheckCircle, Circle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-interface EventItem {
-  id: number;
-  title: string;
-  summary: string;
-  status: string;
-  importance: number;
-  article_count: number;
-  follow_count: number;
-  start_date: string | null;
-}
-
-interface PageData {
-  items: EventItem[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
+import type { Event, PageResponse } from '../../types';
 
 export function AdminEvents() {
-  const [data, setData] = useState<PageData>({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0 });
+  const [data, setData] = useState<PageResponse<Event>>({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0 });
   const [page, setPage] = useState(1);
 
   const fetch = () => {
-    api.get<PageData>('/events', { params: { page, page_size: 20 } }).then((r) => setData(r.data)).catch(() => {});
+    api.get<PageResponse<Event>>('/events', { params: { page, page_size: 20 } }).then((r) => setData(r.data)).catch((e) => console.error('Failed to load events:', e));
   };
 
   useEffect(() => { fetch(); }, [page]);
 
-  const toggleStatus = async (event: EventItem) => {
+  const toggleStatus = async (event: Event) => {
     const newStatus = event.status === 'active' ? 'resolved' : 'active';
-    await api.put(`/events/${event.id}/status?status=${newStatus}`);
-    fetch();
+    try {
+      await api.put(`/events/${event.id}/status?status=${newStatus}`);
+      fetch();
+    } catch (e) {
+      console.error('Failed to toggle event status:', e);
+    }
   };
 
   const deleteEvent = async (id: number) => {
-    await api.delete(`/events/${id}`);
-    fetch();
+    if (!confirm('确定删除此事件？相关文章关联也会被删除。')) return;
+    try {
+      await api.delete(`/events/${id}`);
+      fetch();
+    } catch (e) {
+      console.error('Failed to delete event:', e);
+    }
   };
 
   return (
